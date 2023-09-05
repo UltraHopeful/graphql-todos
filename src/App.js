@@ -35,12 +35,38 @@ const GET_TODOS = gql `
     }
   }`
 
+  const DELETE_TODO = gql`mutation deleteTodo($id:uuid!) {
+    delete_todos(where: {id: {_eq: $id}}) {
+      returning {
+        done
+        id
+        text
+      }
+    }
+  }`
+
 function App() {
   const [todoText, setTodoText]= React.useState('')
   const {data,loading,error} = useQuery(GET_TODOS)
   const [toggleTodo] = useMutation(TOGGLE_TODO)
-  const [addTodo] = useMutation(ADD_TODO, {onCompleted: ()=> setTodoText('')});
+  const [addTodo] = useMutation(ADD_TODO, {onCompleted: ()=> setTodoText('')})
+  const [deleteTodo] = useMutation(DELETE_TODO)
   
+  async function handleDeleteTodo({id}){
+    const isConfirmed = window.confirm('Do you want to delete this todo?')
+    if(isConfirmed){
+      const data = await deleteTodo({
+        variables:{id},
+        update: cache => {
+          const prevData = cache.readQuery ({query: GET_TODOS}) 
+          const newTodos = prevData.todos.filter(todo => todo.id !== id)
+          cache.writeQuery({query: GET_TODOS, data: {todos:newTodos}})
+        } 
+      } )
+      console.log("deleted todo",data);
+    }
+  }
+
   async function handleToggleTodo({id,done}){
     const data = await toggleTodo({ variables: { id: id, done: !done }})
     console.log('toggled todo',data);
@@ -50,9 +76,9 @@ function App() {
     event.preventDefault();
     if (!todoText.trim()) return;
     const data = await addTodo({
-      variables:{text:todoText}, 
-      refetchQueries: [{ query:GET_TODOS }]}
-      )
+      variables:{text:todoText},
+      refetchQueries: [{query: GET_TODOS}]
+    })
     console.log('added todo',data)
     // setTodoText('');
   }
@@ -60,7 +86,7 @@ function App() {
   if (loading) return <div>Loading...</div>
   if (error) return <p>Error : {error.message}</p>;
   return ( 
-  <div className="vh-100 code flex-column items-center justify-center bg-blue white pa3 fl-1">
+  <div className="vh-100 code flex-column items-center justify-center bg-light-blue black pa3 fl-1">
     <h1 className="f2-1 tc">GraphQL Checklist{" "}<span role="img" aria-label="Checkmark">✅</span></h1>
     {/* todo form */}
     <form onSubmit={handleAddTodo} className="flex justify-center">
@@ -71,11 +97,13 @@ function App() {
     <div className="flex items-center justify-center flex-column">
     {
       data.todos.map(todo => (
-        <p key={todo.id}>
-          <input type='checkbox' onChange={() => handleToggleTodo(todo)} ></input>
-          <span className={`pointer list pa1 f3 ${todo.done && 'strike'}`}>{todo.text}</span>
-          <button className="bg-transparent bn f3 br2"><span className="dim red">&times;</span></button>
-        </p>
+        <div key={todo.id} className='flex w-70-l w-70-m pa2'>
+          <button className="bg-transparent bn f3 br2" onClick={()=>{handleDeleteTodo(todo)}}><span className="dim red">&times;</span></button>
+          <input type='checkbox' onChange={() => handleToggleTodo(todo)}></input>
+          <div className='inline-flex w-80'>
+            <span className={`pointer list pa1 f3 ${todo.done && 'strike'}`}>{todo.text}</span>
+          </div>
+        </div>
     ))}
     </div>
   </div>);
